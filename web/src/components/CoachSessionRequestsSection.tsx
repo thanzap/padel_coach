@@ -8,6 +8,7 @@ type SessionRequestRow = {
   id: string
   coach_id: string
   player_id: string
+  player_name: string | null
   requested_start: string
   requested_end: string
   note: string | null
@@ -103,7 +104,7 @@ export function CoachSessionRequestsSection() {
                     {formatAthens(r.requested_start)} → {formatAthens(r.requested_end)}
                   </strong>
                 </p>
-                <p className="muted small">Player id: {r.player_id.slice(0, 8)}…</p>
+                <p className="muted small">Player: {r.player_name?.trim() || 'Unnamed player'}</p>
                 {r.note ? <p>{r.note}</p> : null}
               </div>
               <label>

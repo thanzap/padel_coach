@@ -3,6 +3,7 @@ import { Navigate } from 'react-router-dom'
 import { IncompleteProfileBanner } from '../components/IncompleteProfileBanner'
 import { PageLoading } from '../components/PageLoading'
 import { DashboardSessionsSection } from '../components/DashboardSessionsSection'
+import { PlayerSessionConfirmationsSection } from '../components/PlayerSessionConfirmationsSection'
 import { useAuth } from '../context/AuthContext'
 import { fetchCoachPlacesCached } from '../lib/coachPlacesCache'
 
@@ -49,7 +50,10 @@ export function PlayerDashboardPage() {
         </div>
       </header>
 
-      <DashboardSessionsSection />
+      <div className="stack wide">
+        <PlayerSessionConfirmationsSection />
+        <DashboardSessionsSection />
+      </div>
     </div>
   )
 }

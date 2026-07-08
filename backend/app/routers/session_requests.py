@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
 from app.availability_service import assert_interval_available_for_request
 from app.coaching_session_actions import persist_coaching_session_from_program
@@ -45,17 +45,29 @@ async def create_session_request(
 async def list_session_requests(
     profile: Profile = Depends(get_current_profile),
     session: AsyncSession = Depends(get_session),
-) -> list[SessionRequest]:
+) -> list[SessionRequestOut]:
+    Player = aliased(Profile)
+    Coach = aliased(Profile)
+    stmt = (
+        select(SessionRequest, Player.full_name.label("player_name"), Coach.full_name.label("coach_name"))
+        .join(Player, Player.id == SessionRequest.player_id)
+        .join(Coach, Coach.id == SessionRequest.coach_id)
+    )
     if profile.role == "player":
-        stmt = select(SessionRequest).where(SessionRequest.player_id == profile.id)
+        stmt = stmt.where(SessionRequest.player_id == profile.id)
     elif profile.role == "coach" or profile.role == "admin":
-        stmt = select(SessionRequest).where(SessionRequest.coach_id == profile.id)
+        stmt = stmt.where(SessionRequest.coach_id == profile.id)
     else:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Unsupported role")
 
     stmt = stmt.order_by(SessionRequest.created_at.desc())
-    rows = (await session.scalars(stmt)).all()
-    return list(rows)
+    rows = (await session.execute(stmt)).all()
+    return [
+        SessionRequestOut.model_validate(req).model_copy(
+            update={"player_name": player_name, "coach_name": coach_name}
+        )
+        for req, player_name, coach_name in rows
+    ]
 
 
 @router.post("/{request_id}/respond", response_model=SessionRequestOut)

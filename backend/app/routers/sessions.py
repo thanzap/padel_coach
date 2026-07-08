@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.db import get_session
-from app.deps import get_current_profile, require_coach
+from app.deps import get_current_profile, require_coach, require_player
 from app.coaching_session_actions import persist_coaching_session_from_program
 from app.models import CoachingSession, ExerciseRecording, ExerciseScore, Profile, ProgramExercise, SessionExercise, TrainingProgram
 from app.schemas import (
@@ -115,7 +115,7 @@ async def create_session(
             scheduled_at=body.scheduled_at,
             ends_at=body.ends_at,
             venue_place=(body.venue_place.strip() if body.venue_place else None),
-            status="planned",
+            status="pending_confirmation",
         )
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
@@ -123,6 +123,44 @@ async def create_session(
     await session.commit()
 
     return await _session_detail_response(session, coaching.id)
+
+
+@router.post("/{session_id}/confirm", response_model=CoachingSessionDetailOut)
+async def confirm_coaching_session(
+    session_id: uuid.UUID,
+    profile: Profile = Depends(require_player),
+    session: AsyncSession = Depends(get_session),
+) -> CoachingSessionDetailOut:
+    """Player accepts a coach-proposed session, moving it from pending_confirmation to planned."""
+    loaded = await session.scalar(select(CoachingSession).where(CoachingSession.id == session_id))
+    if loaded is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    if loaded.player_id != profile.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the assigned player can confirm")
+    if loaded.status != "pending_confirmation":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session is not awaiting confirmation")
+    loaded.status = "planned"
+    await session.commit()
+    return await _session_detail_response(session, loaded.id)
+
+
+@router.post("/{session_id}/decline", response_model=CoachingSessionDetailOut)
+async def decline_coaching_session(
+    session_id: uuid.UUID,
+    profile: Profile = Depends(require_player),
+    session: AsyncSession = Depends(get_session),
+) -> CoachingSessionDetailOut:
+    """Player declines a coach-proposed session, cancelling it."""
+    loaded = await session.scalar(select(CoachingSession).where(CoachingSession.id == session_id))
+    if loaded is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    if loaded.player_id != profile.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only the assigned player can decline")
+    if loaded.status != "pending_confirmation":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Session is not awaiting confirmation")
+    loaded.status = "cancelled"
+    await session.commit()
+    return await _session_detail_response(session, loaded.id)
 
 
 @router.get("", response_model=list[CoachingSessionDetailOut])

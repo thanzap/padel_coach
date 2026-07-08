@@ -11,7 +11,7 @@ from app.schemas import PastTrainingSessionOut
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
 
-_SESSION_STATUSES = frozenset({"planned", "in_progress", "completed", "cancelled"})
+_SESSION_STATUSES = frozenset({"pending_confirmation", "planned", "in_progress", "completed", "cancelled"})
 
 
 @router.get("/sessions", response_model=list[PastTrainingSessionOut])

@@ -354,6 +354,8 @@ class SessionRequestOut(BaseModel):
     id: uuid.UUID
     coach_id: uuid.UUID
     player_id: uuid.UUID
+    player_name: str | None = None
+    coach_name: str | None = None
     requested_start: datetime
     requested_end: datetime
     note: str | None

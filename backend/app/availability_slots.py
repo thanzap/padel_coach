@@ -69,7 +69,7 @@ def expand_weekly_slots(
 
 
 def coaching_session_busy_interval(scheduled_at: datetime | None, ends_at: datetime | None, status: str) -> tuple[datetime, datetime] | None:
-    if scheduled_at is None or status not in ("planned", "in_progress"):
+    if scheduled_at is None or status not in ("pending_confirmation", "planned", "in_progress"):
         return None
     start = scheduled_at
     if ends_at is not None and ends_at > start:

@@ -1,7 +1,13 @@
 import { useEffect, useState } from 'react'
 import { apiFetch } from '../lib/api'
 
-export type DashboardSessionFilter = 'all' | 'planned' | 'completed' | 'in_progress' | 'cancelled'
+export type DashboardSessionFilter =
+  | 'all'
+  | 'pending_confirmation'
+  | 'planned'
+  | 'completed'
+  | 'in_progress'
+  | 'cancelled'
 
 export type DashboardSessionRow = {
   session_id: string

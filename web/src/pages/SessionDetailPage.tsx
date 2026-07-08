@@ -334,7 +334,8 @@ export function SessionDetailPage() {
         <section className="card muted-border session-meta-strip">
           <div className="row wrap gap">
             <p>
-              <strong>Status:</strong> {detail.status}
+              <strong>Status:</strong>{' '}
+              {detail.status === 'pending_confirmation' ? 'Awaiting player confirmation' : detail.status}
             </p>
             {detail.scheduled_at ? (
               <p>

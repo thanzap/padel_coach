@@ -474,6 +474,11 @@ h2 {
   border: 1px solid #2c3b44;
 }
 
+.pill--pending_confirmation {
+  border-color: #c9a0ff;
+  color: #c9a0ff;
+}
+
 .pill--planned {
   border-color: #6fa8ff;
   color: #6fa8ff;

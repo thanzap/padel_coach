@@ -9,11 +9,13 @@ function formatSessionDate(iso: string | null): string {
 
 function statusLabel(status: string): string {
   if (status === 'in_progress') return 'In progress'
+  if (status === 'pending_confirmation') return 'Awaiting confirmation'
   return status.charAt(0).toUpperCase() + status.slice(1)
 }
 
 const EMPTY_COPY: Record<DashboardSessionFilter, string> = {
   all: 'No sessions yet.',
+  pending_confirmation: 'No sessions awaiting confirmation.',
   planned: 'No planned sessions.',
   completed: 'No completed sessions.',
   in_progress: 'No sessions in progress.',

@@ -203,6 +203,7 @@ export function SessionNewPage() {
           <h1>New session</h1>
           <p className="muted">
             Pick a saved routine from the library or define a one-off for this session only. Set optional start/end times for the block.
+            The player confirms the session before it is added to their schedule.
           </p>
         </div>
         <nav className="page-context-nav" aria-label="Routine library">

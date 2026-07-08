@@ -7,6 +7,7 @@ import { PastSessionsTable } from './PastSessionsTable'
 
 const FILTERS: { key: DashboardSessionFilter; label: string }[] = [
   { key: 'all', label: 'All' },
+  { key: 'pending_confirmation', label: 'Awaiting' },
   { key: 'planned', label: 'Planned' },
   { key: 'in_progress', label: 'In progress' },
   { key: 'completed', label: 'Completed' },
