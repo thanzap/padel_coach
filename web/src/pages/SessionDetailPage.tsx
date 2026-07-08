@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { PageLoading } from '../components/PageLoading'
 import { useAuth } from '../context/AuthContext'
@@ -47,14 +47,42 @@ type SessionDetail = {
   exercises: SessionExerciseRow[]
 }
 
-function pickRecorderMime(): string | undefined {
-  const candidates = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm']
-  for (const c of candidates) {
-    if (typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(c)) {
-      return c
-    }
+/** Max upload size. Phone-captured video is already H.264-compressed; this keeps storage sane. */
+const MAX_UPLOAD_BYTES = 50 * 1024 * 1024 // 50 MB
+
+function humanMB(bytes: number): string {
+  return `${(bytes / (1024 * 1024)).toFixed(0)} MB`
+}
+
+function extForVideo(file: File): string {
+  const fromName = file.name.includes('.') ? file.name.split('.').pop()!.toLowerCase() : ''
+  if (fromName) return fromName
+  const map: Record<string, string> = {
+    'video/mp4': 'mp4',
+    'video/quicktime': 'mov',
+    'video/webm': 'webm',
+    'video/x-matroska': 'mkv',
   }
-  return undefined
+  return map[file.type] ?? 'mp4'
+}
+
+/** Best-effort clip duration (ms) from file metadata; null if the browser can't read it. */
+function readVideoDurationMs(file: File): Promise<number | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file)
+    const v = document.createElement('video')
+    v.preload = 'metadata'
+    v.onloadedmetadata = () => {
+      const ms = Number.isFinite(v.duration) ? Math.round(v.duration * 1000) : null
+      URL.revokeObjectURL(url)
+      resolve(ms)
+    }
+    v.onerror = () => {
+      URL.revokeObjectURL(url)
+      resolve(null)
+    }
+    v.src = url
+  })
 }
 
 export function SessionDetailPage() {
@@ -69,12 +97,6 @@ export function SessionDetailPage() {
   const [startDraft, setStartDraft] = useState('')
   const [endDraft, setEndDraft] = useState('')
   const [promoteBusy, setPromoteBusy] = useState(false)
-
-  const recorderRef = useRef<MediaRecorder | null>(null)
-  const streamRef = useRef<MediaStream | null>(null)
-  const chunksRef = useRef<BlobPart[]>([])
-  const recordingExerciseRef = useRef<string | null>(null)
-  const startedAtRef = useRef<number | null>(null)
 
   const refresh = useCallback(async () => {
     if (!sessionId) return
@@ -203,91 +225,43 @@ export function SessionDetailPage() {
     }
   }
 
-  function cleanupStream() {
-    streamRef.current?.getTracks().forEach((t) => t.stop())
-    streamRef.current = null
-    recorderRef.current = null
-    chunksRef.current = []
-    recordingExerciseRef.current = null
-    startedAtRef.current = null
-    setBusyExercise(null)
-  }
-
-  async function startRecording(sessionExerciseId: string) {
-    if (!sessionId || !detail) return
+  async function uploadClip(sessionExerciseId: string, file: File | null | undefined) {
+    if (!file || !sessionId) return
     setError(null)
-
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setError('Camera access is not available in this browser context (use HTTPS or localhost).')
+    if (!file.type.startsWith('video/')) {
+      setError('Please choose a video file.')
       return
     }
-
+    if (file.size > MAX_UPLOAD_BYTES) {
+      setError(
+        `That clip is ${humanMB(file.size)}. Please upload a video under ${humanMB(MAX_UPLOAD_BYTES)} ` +
+          '(trim it, or record at a lower quality/resolution).',
+      )
+      return
+    }
+    setBusyExercise(sessionExerciseId)
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
-      streamRef.current = stream
-      const mimeType = pickRecorderMime()
-      const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream)
-      recorderRef.current = recorder
-      chunksRef.current = []
-      recordingExerciseRef.current = sessionExerciseId
-      startedAtRef.current = performance.now()
+      const objectPath = `${sessionId}/${sessionExerciseId}.${extForVideo(file)}`
+      const duration_ms = await readVideoDurationMs(file)
+      const { error: upErr } = await supabase.storage
+        .from('exercise-recordings')
+        .upload(objectPath, file, { upsert: true, contentType: file.type || 'video/mp4' })
+      if (upErr) throw upErr
 
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) chunksRef.current.push(event.data)
-      }
-
-      recorder.onerror = () => {
-        setError('Recording failed.')
-        cleanupStream()
-      }
-
-      recorder.onstop = async () => {
-        const exerciseId = recordingExerciseRef.current
-        const mime = recorder.mimeType || mimeType || 'video/webm'
-        try {
-          if (!exerciseId || !sessionId) return
-          const blob = new Blob(chunksRef.current, { type: mime })
-          const ext = mime.includes('webm') ? 'webm' : 'bin'
-          const objectPath = `${sessionId}/${exerciseId}.${ext}`
-          const { error: upErr } = await supabase.storage
-            .from('exercise-recordings')
-            .upload(objectPath, blob, { upsert: true, contentType: mime })
-          if (upErr) throw upErr
-
-          const duration_ms =
-            startedAtRef.current != null ? Math.round(performance.now() - startedAtRef.current) : null
-
-          await apiFetch(`/sessions/${sessionId}/exercises/${exerciseId}/recording`, {
-            method: 'POST',
-            body: JSON.stringify({
-              storage_object_path: objectPath,
-              duration_ms,
-              mime_type: mime,
-            }),
-          })
-          await refresh()
-        } catch (e: unknown) {
-          setError(e instanceof Error ? e.message : 'Upload failed')
-        } finally {
-          cleanupStream()
-        }
-      }
-
-      recorder.start()
-      setBusyExercise(sessionExerciseId)
+      await apiFetch(`/sessions/${sessionId}/exercises/${sessionExerciseId}/recording`, {
+        method: 'POST',
+        body: JSON.stringify({
+          storage_object_path: objectPath,
+          duration_ms,
+          mime_type: file.type || null,
+        }),
+      })
+      await refresh()
     } catch (e: unknown) {
-      cleanupStream()
-      setError(e instanceof Error ? e.message : 'Could not access camera/microphone')
+      setError(e instanceof Error ? e.message : 'Upload failed')
+    } finally {
+      setBusyExercise(null)
     }
-  }
-
-  function stopRecording() {
-    const recorder = recorderRef.current
-    if (!recorder || recorder.state === 'inactive') {
-      cleanupStream()
-      return
-    }
-    recorder.stop()
   }
 
   async function submitScore(sessionExerciseId: string, e: FormEvent) {
@@ -427,15 +401,21 @@ export function SessionDetailPage() {
                   ) : null}
                 </div>
                 <div className="column end">
-                  {busyExercise === ex.id ? (
-                    <button type="button" className="danger" onClick={stopRecording}>
-                      Stop & upload
-                    </button>
-                  ) : (
-                    <button type="button" onClick={() => void startRecording(ex.id)} disabled={busyExercise !== null}>
-                      Record this exercise
-                    </button>
-                  )}
+                  <label className={`file-upload-btn${busyExercise !== null ? ' is-disabled' : ''}`}>
+                    {busyExercise === ex.id ? 'Uploading…' : recording ? 'Replace clip' : 'Upload clip'}
+                    <input
+                      type="file"
+                      accept="video/*"
+                      hidden
+                      disabled={busyExercise !== null}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0]
+                        e.target.value = ''
+                        void uploadClip(ex.id, f)
+                      }}
+                    />
+                  </label>
+                  <span className="muted small">Video up to {humanMB(MAX_UPLOAD_BYTES)}</span>
                 </div>
               </header>
 
