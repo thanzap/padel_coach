@@ -92,7 +92,9 @@ async def respond_session_request(
     if player is None:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Player profile missing")
 
-    await assert_interval_available_for_request(session, profile.id, req.requested_start, req.requested_end)
+    await assert_interval_available_for_request(
+        session, profile.id, req.requested_start, req.requested_end, ignore_request_id=req.id
+    )
 
     try:
         coaching = await persist_coaching_session_from_program(

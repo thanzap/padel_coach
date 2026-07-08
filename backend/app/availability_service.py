@@ -19,8 +19,13 @@ async def compute_coach_free_intervals(
     coach_id: uuid.UUID,
     day_start: date,
     day_end: date,
+    ignore_request_id: uuid.UUID | None = None,
 ) -> list[tuple[datetime, datetime]]:
-    """Return merged UTC intervals where the coach is free within [day_start, day_end] inclusive."""
+    """Return merged UTC intervals where the coach is free within [day_start, day_end] inclusive.
+
+    ``ignore_request_id`` excludes one pending request from the busy set — used when
+    accepting that request so it does not block its own time slot.
+    """
     range_start = datetime.combine(day_start, dt_time.min, tzinfo=tz.utc)
     range_end_excl = datetime.combine(day_end + timedelta(days=1), dt_time.min, tzinfo=tz.utc)
 
@@ -73,16 +78,12 @@ async def compute_coach_free_intervals(
         if iv:
             busy.append(iv)
 
-    req_rows = (
-        (
-            await db.execute(
-                select(SessionRequest.requested_start, SessionRequest.requested_end, SessionRequest.status).where(
-                    SessionRequest.coach_id == coach_id,
-                )
-            )
-        )
-        .all()
-    )
+    req_stmt = select(
+        SessionRequest.requested_start, SessionRequest.requested_end, SessionRequest.status
+    ).where(SessionRequest.coach_id == coach_id)
+    if ignore_request_id is not None:
+        req_stmt = req_stmt.where(SessionRequest.id != ignore_request_id)
+    req_rows = (await db.execute(req_stmt)).all()
     for rr in req_rows:
         iv = pending_request_busy_interval(rr.requested_start, rr.requested_end, rr.status)
         if iv:
@@ -102,6 +103,7 @@ async def assert_interval_available_for_request(
     coach_id: uuid.UUID,
     req_start: datetime,
     req_end: datetime,
+    ignore_request_id: uuid.UUID | None = None,
 ) -> None:
     from fastapi import HTTPException, status
 
@@ -110,7 +112,7 @@ async def assert_interval_available_for_request(
 
     d0 = req_start.astimezone(tz.utc).date()
     d1 = req_end.astimezone(tz.utc).date()
-    free = await compute_coach_free_intervals(db, coach_id, d0, d1)
+    free = await compute_coach_free_intervals(db, coach_id, d0, d1, ignore_request_id=ignore_request_id)
     want = (req_start.astimezone(tz.utc), req_end.astimezone(tz.utc))
     for chunk in free:
         if interval_covers(chunk, want):

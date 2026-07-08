@@ -1,14 +1,10 @@
 import { Link } from 'react-router-dom'
 import { PageLoading } from './PageLoading'
+import { formatAthens } from '../lib/timezone'
 import type { DashboardSessionFilter, DashboardSessionRow } from '../hooks/useDashboardSessions'
 
 function formatSessionDate(iso: string | null): string {
-  if (!iso) return '—'
-  try {
-    return new Date(iso).toLocaleString()
-  } catch {
-    return iso
-  }
+  return formatAthens(iso)
 }
 
 function statusLabel(status: string): string {

@@ -266,7 +266,7 @@ class ScoreUpsert(BaseModel):
 
 
 class CoachWeeklySlotRuleIn(BaseModel):
-    """Weekly rule using wall-clock times interpreted in UTC (same basis as session timestamps)."""
+    """Weekly rule using wall-clock times interpreted in the app timezone (Europe/Athens)."""
 
     weekday: int = Field(ge=0, le=6, description="0 = Monday … 6 = Sunday")
     start_local: str = Field(pattern=r"^\d{1,2}:\d{2}$", examples=["09:00"])

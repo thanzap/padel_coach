@@ -4,6 +4,7 @@ import { PageLoading } from '../components/PageLoading'
 import { useAuth } from '../context/AuthContext'
 import { apiFetch } from '../lib/api'
 import { datetimeLocalToIsoOrNull, toDatetimeLocalValue } from '../lib/datetimeLocal'
+import { formatAthens } from '../lib/timezone'
 import { supabase } from '../lib/supabase'
 
 type Recording = {
@@ -337,14 +338,14 @@ export function SessionDetailPage() {
             </p>
             {detail.scheduled_at ? (
               <p>
-                <strong>Start:</strong> {new Date(detail.scheduled_at).toLocaleString()}
+                <strong>Start:</strong> {formatAthens(detail.scheduled_at)}
               </p>
             ) : (
               <p className="muted">No start time.</p>
             )}
             {detail.ends_at ? (
               <p>
-                <strong>End:</strong> {new Date(detail.ends_at).toLocaleString()}
+                <strong>End:</strong> {formatAthens(detail.ends_at)}
               </p>
             ) : (
               <p className="muted">No end time.</p>

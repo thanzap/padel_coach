@@ -1,14 +1,24 @@
-"""Pure helpers to expand weekly rules and subtract busy intervals (UTC wall-clock + weekly TIME)."""
+"""Pure helpers to expand weekly rules and subtract busy intervals.
+
+Weekly availability TIME values are interpreted as wall-clock in APP_TZ (Europe/Athens)
+and converted to UTC per calendar day, so daylight-saving shifts are handled correctly.
+"""
 
 from collections import defaultdict
 from collections.abc import Iterable
 from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 DEFAULT_SESSION_BLOCK = timedelta(hours=1)
 
+# Single display/scheduling timezone for the whole app (mirrors web/src/lib/timezone.ts).
+APP_TZ = ZoneInfo("Europe/Athens")
+
 
 def combine_day_time_utc(d: date, t: time) -> datetime:
-    return datetime(d.year, d.month, d.day, t.hour, t.minute, t.second, tzinfo=timezone.utc)
+    """Combine a calendar day + wall-clock time in APP_TZ, returned as a UTC datetime."""
+    local = datetime(d.year, d.month, d.day, t.hour, t.minute, t.second, tzinfo=APP_TZ)
+    return local.astimezone(timezone.utc)
 
 
 def merge_intervals(intervals: list[tuple[datetime, datetime]]) -> list[tuple[datetime, datetime]]:

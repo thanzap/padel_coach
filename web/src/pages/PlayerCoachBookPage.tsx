@@ -4,6 +4,13 @@ import { IncompleteProfileBanner } from '../components/IncompleteProfileBanner'
 import { PageLoading } from '../components/PageLoading'
 import { useAuth } from '../context/AuthContext'
 import { apiFetch } from '../lib/api'
+import {
+  addDaysToDayKey,
+  athensClock,
+  athensMidnightInstant,
+  formatAthensDayLabel,
+  startOfAthensWeekKey,
+} from '../lib/timezone'
 
 type CoachHit = {
   id: string
@@ -24,36 +31,14 @@ type FreeSlotsApi = {
   slots: { start: string; end: string }[]
 }
 
-function startOfWeekMondayUTC(d: Date): Date {
-  const wd = d.getUTCDay()
-  const py = (wd + 6) % 7
-  const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
-  start.setUTCDate(start.getUTCDate() - py)
-  return start
-}
-
-function addDaysUTC(d: Date, days: number): Date {
-  const n = new Date(d.getTime())
-  n.setUTCDate(n.getUTCDate() + days)
-  return n
-}
-
-function utcDateLabel(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
-
 const SLOT_GRID_MS = 15 * 60_000
 const MIN_SESSION_MS = 15 * 60_000
-
-function utcMidnightFor(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
-}
 
 function intervalsOverlap(a0: Date, a1: Date, b0: Date, b1: Date): boolean {
   return a0.getTime() < b1.getTime() && b0.getTime() < a1.getTime()
 }
 
-function clipGapToUtcDay(
+function clipGapToDay(
   gapStart: Date,
   gapEnd: Date,
   dayStart: Date,
@@ -90,28 +75,13 @@ function gridEndsForStart(start: Date, clip: { start: Date; end: Date }): Date[]
   return out
 }
 
-function formatDayOption(dayStart: Date): string {
-  return dayStart.toLocaleDateString(undefined, {
-    weekday: 'short',
-    month: 'short',
-    day: 'numeric',
-    timeZone: 'UTC',
-  })
-}
-
-function formatUtcClock(d: Date): string {
-  const hh = String(d.getUTCHours()).padStart(2, '0')
-  const mm = String(d.getUTCMinutes()).padStart(2, '0')
-  return `${hh}:${mm}`
-}
-
 export function PlayerCoachBookPage() {
   const { coachId } = useParams<{ coachId: string }>()
   const location = useLocation()
   const coachFromNav = (location.state as { coach?: CoachHit } | undefined)?.coach
 
   const { profile, loading, profileLoading } = useAuth()
-  const [weekAnchor, setWeekAnchor] = useState(() => startOfWeekMondayUTC(new Date()))
+  const [weekAnchorKey, setWeekAnchorKey] = useState(() => startOfAthensWeekKey(new Date()))
   const [weekly, setWeekly] = useState<WeeklySlotApi[]>([])
   const [free, setFree] = useState<FreeSlotsApi | null>(null)
   const [loadErr, setLoadErr] = useState<string | null>(null)
@@ -124,7 +94,7 @@ export function PlayerCoachBookPage() {
   const [selectedStartIso, setSelectedStartIso] = useState('')
   const [selectedEndIso, setSelectedEndIso] = useState('')
 
-  const weekEnd = useMemo(() => addDaysUTC(weekAnchor, 6), [weekAnchor])
+  const weekEndKey = useMemo(() => addDaysToDayKey(weekAnchorKey, 6), [weekAnchorKey])
 
   useEffect(() => {
     if (!coachId || !profile || profile.role !== 'player') {
@@ -139,7 +109,7 @@ export function PlayerCoachBookPage() {
         const [wRows, fRows] = await Promise.all([
           apiFetch<WeeklySlotApi[]>(`/coaches/${coachId}/weekly-slots`),
           apiFetch<FreeSlotsApi>(
-            `/coaches/${coachId}/free-slots?start_date=${utcDateLabel(weekAnchor)}&end_date=${utcDateLabel(weekEnd)}`,
+            `/coaches/${coachId}/free-slots?start_date=${weekAnchorKey}&end_date=${weekEndKey}`,
           ),
         ])
         if (!cancelled) {
@@ -155,26 +125,24 @@ export function PlayerCoachBookPage() {
     return () => {
       cancelled = true
     }
-  }, [coachId, profile, weekAnchor, weekEnd])
+  }, [coachId, profile, weekAnchorKey, weekEndKey])
 
   const availableDays = useMemo(() => {
     if (!free?.slots.length) return []
     const keys = new Set<string>()
     for (let i = 0; i < 7; i++) {
-      const calDay = addDaysUTC(weekAnchor, i)
-      const dayStart = utcMidnightFor(calDay)
-      const dayEnd = addDaysUTC(dayStart, 1)
-      const key = utcDateLabel(dayStart)
+      const key = addDaysToDayKey(weekAnchorKey, i)
+      const dayStart = athensMidnightInstant(key)
+      const dayEnd = athensMidnightInstant(addDaysToDayKey(key, 1))
       for (const s of free.slots) {
         const a = new Date(s.start)
         const b = new Date(s.end)
         if (!intervalsOverlap(a, b, dayStart, dayEnd)) continue
-        const clip = clipGapToUtcDay(a, b, dayStart, dayEnd)
-        if (clip) keys.add(key)
+        if (clipGapToDay(a, b, dayStart, dayEnd)) keys.add(key)
       }
     }
     return [...keys].sort()
-  }, [free, weekAnchor])
+  }, [free, weekAnchorKey])
 
   const resolvedDayKey = useMemo(() => {
     if (selectedDayKey && availableDays.includes(selectedDayKey)) return selectedDayKey
@@ -183,11 +151,11 @@ export function PlayerCoachBookPage() {
 
   const clipsForSelectedDay = useMemo(() => {
     if (!resolvedDayKey || !free?.slots.length) return []
-    const dayStart = new Date(`${resolvedDayKey}T00:00:00.000Z`)
-    const dayEnd = addDaysUTC(dayStart, 1)
+    const dayStart = athensMidnightInstant(resolvedDayKey)
+    const dayEnd = athensMidnightInstant(addDaysToDayKey(resolvedDayKey, 1))
     const clips: { start: Date; end: Date }[] = []
     for (const s of free.slots) {
-      const clip = clipGapToUtcDay(new Date(s.start), new Date(s.end), dayStart, dayEnd)
+      const clip = clipGapToDay(new Date(s.start), new Date(s.end), dayStart, dayEnd)
       if (clip) clips.push(clip)
     }
     return clips
@@ -218,7 +186,7 @@ export function PlayerCoachBookPage() {
 
   useEffect(() => {
     setSelectedDayKey('')
-  }, [weekAnchor])
+  }, [weekAnchorKey])
 
   useEffect(() => {
     setSelectedStartIso('')
@@ -269,7 +237,7 @@ export function PlayerCoachBookPage() {
       })
       setRequestOk('Request sent. The coach will confirm with a training routine.')
       const refreshed = await apiFetch<FreeSlotsApi>(
-        `/coaches/${coachId}/free-slots?start_date=${utcDateLabel(weekAnchor)}&end_date=${utcDateLabel(weekEnd)}`,
+        `/coaches/${coachId}/free-slots?start_date=${weekAnchorKey}&end_date=${weekEndKey}`,
       )
       setFree(refreshed)
     } catch (e: unknown) {
@@ -334,7 +302,7 @@ export function PlayerCoachBookPage() {
         ) : (
           <>
         <section className="card muted-border stack wide">
-          <h2>Typical weekly hours (UTC)</h2>
+          <h2>Typical weekly hours (Athens time)</h2>
           <p className="muted small">
             Actual openings depend on existing sessions, pending requests, and coach blocks — see “Open slots” below.
           </p>
@@ -362,20 +330,20 @@ export function PlayerCoachBookPage() {
           <div className="availability-cal-toolbar">
             <h2>Open slots</h2>
             <div className="availability-cal-nav">
-              <button type="button" className="button ghost" onClick={() => setWeekAnchor((w) => addDaysUTC(w, -7))}>
+              <button type="button" className="button ghost" onClick={() => setWeekAnchorKey((k) => addDaysToDayKey(k, -7))}>
                 ← Prev week
               </button>
-              <button type="button" className="button ghost" onClick={() => setWeekAnchor(startOfWeekMondayUTC(new Date()))}>
+              <button type="button" className="button ghost" onClick={() => setWeekAnchorKey(startOfAthensWeekKey(new Date()))}>
                 This week
               </button>
-              <button type="button" className="button ghost" onClick={() => setWeekAnchor((w) => addDaysUTC(w, 7))}>
+              <button type="button" className="button ghost" onClick={() => setWeekAnchorKey((k) => addDaysToDayKey(k, 7))}>
                 Next week →
               </button>
             </div>
           </div>
 
           <p className="muted small">
-            Pick a day that has openings, then start and end (UTC, 15-minute steps).
+            Pick a day that has openings, then start and end (Athens time, 15-minute steps).
           </p>
 
           <label className="stack wide">
@@ -388,7 +356,7 @@ export function PlayerCoachBookPage() {
           ) : (
             <div className="player-book-slot-picker">
               <label>
-                Day (UTC)
+                Day
                 <select
                   value={resolvedDayKey}
                   onChange={(e) => setSelectedDayKey(e.target.value)}
@@ -396,7 +364,7 @@ export function PlayerCoachBookPage() {
                 >
                   {availableDays.map((key) => (
                     <option key={key} value={key}>
-                      {formatDayOption(new Date(`${key}T12:00:00.000Z`))}
+                      {formatAthensDayLabel(key)}
                     </option>
                   ))}
                 </select>
@@ -411,7 +379,7 @@ export function PlayerCoachBookPage() {
                   <option value="">Choose…</option>
                   {startOptions.map((st) => (
                     <option key={st.toISOString()} value={st.toISOString()}>
-                      {formatUtcClock(st)}
+                      {athensClock(st)}
                     </option>
                   ))}
                 </select>
@@ -431,14 +399,14 @@ export function PlayerCoachBookPage() {
                     <option value="">—</option>
                   ) : endOptions.length === 1 ? (
                     <option value={endOptions[0].toISOString()}>
-                      {formatUtcClock(endOptions[0])}
+                      {athensClock(endOptions[0])}
                     </option>
                   ) : (
                     <>
                       <option value="">Choose…</option>
                       {endOptions.map((en) => (
                         <option key={en.toISOString()} value={en.toISOString()}>
-                          {formatUtcClock(en)}
+                          {athensClock(en)}
                         </option>
                       ))}
                     </>

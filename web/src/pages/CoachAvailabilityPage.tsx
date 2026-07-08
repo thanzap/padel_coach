@@ -11,6 +11,15 @@ import { IncompleteProfileBanner } from '../components/IncompleteProfileBanner'
 import { PageLoading } from '../components/PageLoading'
 import { useAuth } from '../context/AuthContext'
 import { apiFetch } from '../lib/api'
+import { datetimeLocalToIsoOrNull } from '../lib/datetimeLocal'
+import {
+  addDaysToDayKey,
+  athensDayTimeInstant,
+  athensMidnightInstant,
+  athensPythonWeekday,
+  formatAthens,
+  startOfAthensWeekKey,
+} from '../lib/timezone'
 
 const WEEKDAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] as const
 
@@ -43,56 +52,24 @@ function compactTime(isoOrHm: string): string {
   return `${h}:${m[2]}`
 }
 
-/** Python weekday: Mon=0 … Sun=6 */
-function pythonWeekdayUTC(d: Date): number {
-  const wd = d.getUTCDay()
-  return (wd + 6) % 7
-}
-
-function startOfWeekMondayUTC(d: Date): Date {
-  const py = pythonWeekdayUTC(d)
-  const start = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0, 0))
-  start.setUTCDate(start.getUTCDate() - py)
-  return start
-}
-
-function addDaysUTC(d: Date, days: number): Date {
-  const n = new Date(d.getTime())
-  n.setUTCDate(n.getUTCDate() + days)
-  return n
-}
-
-function utcDateLabel(d: Date): string {
-  return d.toISOString().slice(0, 10)
-}
-
-function parseUtcHmOnDay(day: Date, hm: string): Date | null {
-  const m = hm.match(/^(\d{1,2}):(\d{2})(?::(\d{2}))?/)
-  if (!m) return null
-  const h = Number(m[1])
-  const min = Number(m[2])
-  const sec = m[3] ? Number(m[3]) : 0
-  return new Date(
-    Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), h, min, sec, 0),
-  )
-}
-
 const DAY_START_H = 6
 const DAY_END_H = 22
 const DAY_SPAN_H = DAY_END_H - DAY_START_H
 
-function bandStyle(start: Date, end: Date, day: Date): CSSProperties | null {
-  const dayStart = new Date(
-    Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), DAY_START_H, 0, 0, 0),
-  )
-  const dayEnd = new Date(
-    Date.UTC(day.getUTCFullYear(), day.getUTCMonth(), day.getUTCDate(), DAY_END_H, 0, 0, 0),
-  )
+function hhmm(h: number): string {
+  return `${String(h).padStart(2, '0')}:00`
+}
+
+/** Position a band within a day column, using Athens 06:00–22:00 boundaries for that day. */
+function bandStyle(start: Date, end: Date, dayKey: string): CSSProperties | null {
+  const dayStart = athensDayTimeInstant(dayKey, hhmm(DAY_START_H))
+  const dayEnd = athensDayTimeInstant(dayKey, hhmm(DAY_END_H))
   const clipStart = Math.max(start.getTime(), dayStart.getTime())
   const clipEnd = Math.min(end.getTime(), dayEnd.getTime())
   if (clipEnd <= clipStart) return null
-  const topPct = ((clipStart - dayStart.getTime()) / (DAY_SPAN_H * 3600_000)) * 100
-  const heightPct = ((clipEnd - clipStart) / (DAY_SPAN_H * 3600_000)) * 100
+  const spanMs = dayEnd.getTime() - dayStart.getTime()
+  const topPct = ((clipStart - dayStart.getTime()) / spanMs) * 100
+  const heightPct = ((clipEnd - clipStart) / spanMs) * 100
   return {
     top: `${topPct}%`,
     height: `${Math.max(heightPct, 1.2)}%`,
@@ -118,7 +95,7 @@ export function CoachAvailabilityPage() {
   const [blockEndLocal, setBlockEndLocal] = useState('')
   const [blockReason, setBlockReason] = useState('')
 
-  const [weekAnchor, setWeekAnchor] = useState(() => startOfWeekMondayUTC(new Date()))
+  const [weekAnchorKey, setWeekAnchorKey] = useState(() => startOfAthensWeekKey(new Date()))
 
   const [calendarBusy, setCalendarBusy] = useState<CalendarBusyApi[]>([])
   const [calendarBusyErr, setCalendarBusyErr] = useState<string | null>(null)
@@ -182,8 +159,8 @@ export function CoachAvailabilityPage() {
   useEffect(() => {
     if (!profile || (profile.role !== 'coach' && profile.role !== 'admin')) return
     let cancelled = false
-    const ws = utcDateLabel(weekAnchor)
-    const we = utcDateLabel(addDaysUTC(weekAnchor, 6))
+    const ws = weekAnchorKey
+    const we = addDaysToDayKey(weekAnchorKey, 6)
     setCalendarBusyErr(null)
     ;(async () => {
       try {
@@ -201,7 +178,7 @@ export function CoachAvailabilityPage() {
     return () => {
       cancelled = true
     }
-  }, [profile, weekAnchor])
+  }, [profile, weekAnchorKey])
 
   function addSlotRow(weekday: number) {
     setDraft((prev) => {
@@ -256,8 +233,9 @@ export function CoachAvailabilityPage() {
   async function submitBlock(e: FormEvent) {
     e.preventDefault()
     if (!blockStartLocal || !blockEndLocal) return
-    const starts_at = new Date(blockStartLocal).toISOString()
-    const ends_at = new Date(blockEndLocal).toISOString()
+    const starts_at = datetimeLocalToIsoOrNull(blockStartLocal)
+    const ends_at = datetimeLocalToIsoOrNull(blockEndLocal)
+    if (!starts_at || !ends_at) return
     setBlockBusy(true)
     setBlocksErr(null)
     try {
@@ -291,11 +269,11 @@ export function CoachAvailabilityPage() {
     }
   }
 
-  const weekDays = useMemo(() => {
-    const xs: Date[] = []
-    for (let i = 0; i < 7; i++) xs.push(addDaysUTC(weekAnchor, i))
+  const weekDayKeys = useMemo(() => {
+    const xs: string[] = []
+    for (let i = 0; i < 7; i++) xs.push(addDaysToDayKey(weekAnchorKey, i))
     return xs
-  }, [weekAnchor])
+  }, [weekAnchorKey])
 
   if (loading || profileLoading) {
     return (
@@ -318,7 +296,7 @@ export function CoachAvailabilityPage() {
           <p className="eyebrow">Coach</p>
           <h1>Availability</h1>
           <p className="muted">
-            Weekly hours use UTC wall-clock times (same basis as scheduled sessions). Blocks remove slices from those
+            Weekly hours use Athens time (same basis as scheduled sessions). Blocks remove slices from those
             hours for vacations or focus time.
           </p>
         </div>
@@ -352,7 +330,7 @@ export function CoachAvailabilityPage() {
                       {draft[weekday].map((row, idx) => (
                         <li key={`${weekday}-${idx}`}>
                           <label>
-                            Start (UTC)
+                            Start (Athens)
                             <input
                               type="time"
                               value={row.start_local}
@@ -360,7 +338,7 @@ export function CoachAvailabilityPage() {
                             />
                           </label>
                           <label>
-                            End (UTC)
+                            End (Athens)
                             <input
                               type="time"
                               value={row.end_local}
@@ -385,15 +363,15 @@ export function CoachAvailabilityPage() {
 
         <section className="card muted-border stack wide">
           <div className="availability-cal-toolbar">
-            <h2>Week preview (UTC)</h2>
+            <h2>Week preview (Athens)</h2>
             <div className="availability-cal-nav">
-              <button type="button" className="button ghost" onClick={() => setWeekAnchor((w) => addDaysUTC(w, -7))}>
+              <button type="button" className="button ghost" onClick={() => setWeekAnchorKey((k) => addDaysToDayKey(k, -7))}>
                 ← Prev week
               </button>
-              <button type="button" className="button ghost" onClick={() => setWeekAnchor(startOfWeekMondayUTC(new Date()))}>
+              <button type="button" className="button ghost" onClick={() => setWeekAnchorKey(startOfAthensWeekKey(new Date()))}>
                 This week
               </button>
-              <button type="button" className="button ghost" onClick={() => setWeekAnchor((w) => addDaysUTC(w, 7))}>
+              <button type="button" className="button ghost" onClick={() => setWeekAnchorKey((k) => addDaysToDayKey(k, 7))}>
                 Next week →
               </button>
             </div>
@@ -411,35 +389,35 @@ export function CoachAvailabilityPage() {
                 </div>
               ))}
             </div>
-            {weekDays.map((day) => {
-              const py = pythonWeekdayUTC(day)
+            {weekDayKeys.map((dayKey) => {
+              const py = athensPythonWeekday(athensMidnightInstant(dayKey))
               const rules = draft[py]
               return (
-                <div key={utcDateLabel(day)} className="availability-cal-column">
+                <div key={dayKey} className="availability-cal-column">
                   <div className="availability-cal-col-head">
                     <strong>{WEEKDAY_LABELS[py]}</strong>
-                    <span className="muted small">{utcDateLabel(day)}</span>
+                    <span className="muted small">{dayKey}</span>
                   </div>
                   <div className="availability-cal-day-body">
                     {rules.map((r, i) => {
-                      const st = parseUtcHmOnDay(day, r.start_local)
-                      const en = parseUtcHmOnDay(day, r.end_local)
-                      if (!st || !en || en <= st) return null
-                      const stl = bandStyle(st, en, day)
+                      const st = athensDayTimeInstant(dayKey, r.start_local)
+                      const en = athensDayTimeInstant(dayKey, r.end_local)
+                      if (en <= st) return null
+                      const stl = bandStyle(st, en, dayKey)
                       if (!stl) return null
                       return (
                         <div
                           key={`r-${i}`}
                           className="availability-cal-band recurring"
                           style={stl}
-                          title={`${r.start_local}–${r.end_local} UTC`}
+                          title={`${r.start_local}–${r.end_local} Athens`}
                         />
                       )
                     })}
                     {calendarBusy.map((row) => {
                       const st = new Date(row.start)
                       const en = new Date(row.end)
-                      const stl = bandStyle(st, en, day)
+                      const stl = bandStyle(st, en, dayKey)
                       if (!stl) return null
                       const cls =
                         row.kind === 'pending_request'
@@ -449,7 +427,7 @@ export function CoachAvailabilityPage() {
                         row.kind === 'pending_request' ? 'Pending session request' : 'Planned / in‑progress session'
                       return (
                         <div
-                          key={`${utcDateLabel(day)}-${row.kind}-${row.start}-${row.end}`}
+                          key={`${dayKey}-${row.kind}-${row.start}-${row.end}`}
                           className={cls}
                           style={stl}
                           title={title}
@@ -459,7 +437,7 @@ export function CoachAvailabilityPage() {
                     {blocks.map((b) => {
                       const st = new Date(b.starts_at)
                       const en = new Date(b.ends_at)
-                      const stl = bandStyle(st, en, day)
+                      const stl = bandStyle(st, en, dayKey)
                       if (!stl) return null
                       return (
                         <div
@@ -480,13 +458,13 @@ export function CoachAvailabilityPage() {
         <section className="card muted-border stack wide">
           <h2>Block time</h2>
           <p className="muted small">
-            Use your local timezone here; it is converted to ISO timestamps for the server. Blocks hide those intervals
+            Times are entered in Athens time and stored as absolute timestamps. Blocks hide those intervals
             from players even if weekly hours cover them.
           </p>
           {blocksErr ? <p className="banner error">{blocksErr}</p> : null}
           <form className="stack coach-search-form" onSubmit={(ev) => void submitBlock(ev)}>
             <label>
-              Block starts
+              Block starts (Athens)
               <input
                 type="datetime-local"
                 value={blockStartLocal}
@@ -495,7 +473,7 @@ export function CoachAvailabilityPage() {
               />
             </label>
             <label>
-              Block ends
+              Block ends (Athens)
               <input
                 type="datetime-local"
                 value={blockEndLocal}
@@ -522,7 +500,7 @@ export function CoachAvailabilityPage() {
                 <li key={b.id} className="card muted-border">
                   <div>
                     <strong>
-                      {new Date(b.starts_at).toLocaleString()} → {new Date(b.ends_at).toLocaleString()}
+                      {formatAthens(b.starts_at)} → {formatAthens(b.ends_at)}
                     </strong>
                     {b.reason ? <p className="muted small">{b.reason}</p> : null}
                   </div>

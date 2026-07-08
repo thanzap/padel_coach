@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { apiFetch } from '../lib/api'
+import { formatAthens } from '../lib/timezone'
 import { PageLoading } from './PageLoading'
 
 type SessionRequestRow = {
@@ -99,7 +100,7 @@ export function CoachSessionRequestsSection() {
               <div>
                 <p>
                   <strong>
-                    {new Date(r.requested_start).toLocaleString()} → {new Date(r.requested_end).toLocaleString()}
+                    {formatAthens(r.requested_start)} → {formatAthens(r.requested_end)}
                   </strong>
                 </p>
                 <p className="muted small">Player id: {r.player_id.slice(0, 8)}…</p>
