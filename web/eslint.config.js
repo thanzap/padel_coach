@@ -18,5 +18,12 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      // Data loading still uses the fetch-in-useEffect pattern; tracked as warnings
+      // until it moves to a query library (see README roadmap).
+      'react-hooks/set-state-in-effect': 'warn',
+      // AuthContext exports its provider and its hook from one module on purpose.
+      'react-refresh/only-export-components': ['warn', { allowConstantExport: true }],
+    },
   },
 ])

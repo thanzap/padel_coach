@@ -17,7 +17,7 @@ async function accessTokenWithRefreshFallback(): Promise<string | null> {
 }
 
 export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
-  let token = await accessTokenWithRefreshFallback()
+  const token = await accessTokenWithRefreshFallback()
   if (!token) {
     throw new Error('Not signed in')
   }

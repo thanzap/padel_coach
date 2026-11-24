@@ -1,0 +1,9 @@
+line-length = 150
+target-version = "py311"
+extend-exclude = ["web", "**/.venv"]
+
+[lint]
+select = ["E", "F", "I", "B"]
+# B008: FastAPI's Depends()/Query() defaults are the framework idiom.
+# E712: SQLAlchemy column comparisons (`col == True`) build SQL, not Python bools.
+ignore = ["B008", "E712"]

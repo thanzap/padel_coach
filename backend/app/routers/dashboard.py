@@ -1,8 +1,8 @@
+from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import status as http_status
 from sqlalchemy import func, select
-from sqlalchemy.orm import aliased
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
+from sqlalchemy.orm import aliased
 
 from app.db import get_session
 from app.deps import get_current_profile

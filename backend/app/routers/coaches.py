@@ -1,10 +1,9 @@
 import uuid
 from datetime import date
 
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.availability_service import compute_coach_free_intervals
 from app.db import get_session

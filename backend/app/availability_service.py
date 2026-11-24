@@ -1,5 +1,7 @@
 import uuid
-from datetime import date, datetime, time as dt_time, timedelta, timezone as tz
+from datetime import date, datetime, timedelta
+from datetime import time as dt_time
+from datetime import timezone as tz
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -11,7 +13,7 @@ from app.availability_slots import (
     pending_request_busy_interval,
     subtract_intervals,
 )
-from app.models import CoachAvailabilityBlock, CoachWeeklySlot, CoachingSession, SessionRequest
+from app.models import CoachAvailabilityBlock, CoachingSession, CoachWeeklySlot, SessionRequest
 
 
 async def compute_coach_free_intervals(

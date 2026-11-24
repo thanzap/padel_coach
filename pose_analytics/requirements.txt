@@ -1,0 +1,5 @@
+# MediaPipe's legacy `solutions` API (Pose) is used; pin a release that ships it.
+mediapipe==0.10.21
+opencv-python-headless>=4.9,<5
+numpy>=1.26,<2
+pandas>=2.1

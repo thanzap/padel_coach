@@ -1,5 +1,7 @@
 import uuid
-from datetime import date, datetime, timedelta, time as dt_time, timezone as tz
+from datetime import date, datetime, timedelta
+from datetime import time as dt_time
+from datetime import timezone as tz
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import delete, select
@@ -8,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.availability_slots import coaching_session_busy_interval, pending_request_busy_interval
 from app.db import get_session
 from app.deps import require_coach
-from app.models import CoachAvailabilityBlock, CoachWeeklySlot, CoachingSession, Profile, SessionRequest
+from app.models import CoachAvailabilityBlock, CoachingSession, CoachWeeklySlot, Profile, SessionRequest
 from app.schemas import (
     CalendarBusyIntervalOut,
     CoachAvailabilityBlockCreate,

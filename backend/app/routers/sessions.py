@@ -6,10 +6,18 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from app.coaching_session_actions import persist_coaching_session_from_program
 from app.db import get_session
 from app.deps import get_current_profile, require_coach, require_player
-from app.coaching_session_actions import persist_coaching_session_from_program
-from app.models import CoachingSession, ExerciseRecording, ExerciseScore, Profile, ProgramExercise, SessionExercise, TrainingProgram
+from app.models import (
+    CoachingSession,
+    ExerciseRecording,
+    ExerciseScore,
+    Profile,
+    ProgramExercise,
+    SessionExercise,
+    TrainingProgram,
+)
 from app.schemas import (
     CoachingSessionCreate,
     CoachingSessionDetailOut,

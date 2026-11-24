@@ -27,3 +27,10 @@ logs/
 .vscode/*
 !.vscode/extensions.json
 .idea/
+
+# --- Pose analytics outputs / local media ---
+.venv-pose/
+out/
+*.mov
+*.mp4
+!docs/*.mp4

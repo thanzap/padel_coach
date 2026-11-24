@@ -1,8 +1,8 @@
 import uuid
 
 import jwt
-from jwt import PyJWKClient
 from fastapi import HTTPException, status
+from jwt import PyJWKClient
 
 from app.config import settings
 

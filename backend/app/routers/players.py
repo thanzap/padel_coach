@@ -1,7 +1,6 @@
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-
-from fastapi import APIRouter, Depends, Query
 
 from app.db import get_session
 from app.deps import require_coach
