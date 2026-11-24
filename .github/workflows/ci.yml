@@ -18,7 +18,7 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt pytest ruff
       - run: ruff check app tests
-      - run: pytest -q tests
+      - run: python -m pytest -q tests
 
   pose-analytics:
     runs-on: ubuntu-latest
@@ -30,7 +30,7 @@ jobs:
           cache: pip
       - run: pip install -r pose_analytics/requirements.txt pytest ruff
       - run: ruff check pose_analytics
-      - run: pytest -q pose_analytics/tests
+      - run: python -m pytest -q pose_analytics/tests
 
   web:
     runs-on: ubuntu-latest

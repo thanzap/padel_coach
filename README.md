@@ -97,8 +97,8 @@ python -m pose_analytics.analyze --input my_clip.mp4 --output-dir out/ \
 ### Tests
 
 ```bash
-cd backend && pytest -q tests          # scheduling / availability logic
-pytest -q pose_analytics/tests         # pose geometry and stance scoring
+cd backend && python -m pytest -q tests        # scheduling / availability logic
+cd .. && python -m pytest -q pose_analytics/tests # pose geometry and stance scoring
 cd web && npm run lint && npm run build
 ```
 
